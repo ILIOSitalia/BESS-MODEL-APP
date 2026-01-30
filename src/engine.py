@@ -289,10 +289,24 @@ def run_financial_model(
         Augmentation = augmentation_by_year.get(y, 0.0)
         Decommissioning = decom_cost if (y == decom_year and y != 0) else 0.0
 
+        # ---------------------------
+        # CASH RESERVE (auto, only if Decommissioning > 0)
+        # - contributions years 1..(life-1)
+        # - release at year = life (same amount as decom_cost)
+        # - does NOT affect EBITDA/EBIT, only cash flows
+        # ---------------------------
+        Cash_Reserve = 0.0
+        if decom_cost > 0 and pj.project_life > 1:
+            annual_contribution = decom_cost / (pj.project_life - 1)
+            if 1 <= y < pj.project_life:
+                Cash_Reserve = -annual_contribution
+            elif y == pj.project_life:
+                Cash_Reserve = decom_cost
+
         CFADS = EBITDA - Taxes
         DSCR = CFADS / Debt_Service if Debt_Service > 0 else None
 
-        Project_FCF = EBITDA - Taxes - CAPEX - Augmentation - Decommissioning - Royalty_Upfront_y0
+        Project_FCF = EBITDA - Taxes - CAPEX - Augmentation - Decommissioning - Royalty_Upfront_y0 + Cash_Reserve
 
         Equity_CF = (
             -(CAPEX - debt_amount) - debt_fees - Royalty_Upfront_y0
@@ -336,6 +350,8 @@ def run_financial_model(
 
                 "Project_FCF": Project_FCF,
                 "Equity_CF": Equity_CF,
+
+                "Cash_Reserve": Cash_Reserve,
             }
         )
 
