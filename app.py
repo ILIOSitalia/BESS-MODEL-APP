@@ -324,7 +324,7 @@ def build_pdf_report_investor(
         else:
             c.setFont("Helvetica", 9)
             c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
             c.setFillColor(colors.black)
 
     footer(w)
@@ -343,7 +343,7 @@ def build_pdf_report_investor(
         else:
             c.setFont("Helvetica", 9)
             c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
             c.setFillColor(colors.black)
 
     if "dscr" in figs:
@@ -353,7 +353,7 @@ def build_pdf_report_investor(
         else:
             c.setFont("Helvetica", 9)
             c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
             c.setFillColor(colors.black)
 
     footer(w)
