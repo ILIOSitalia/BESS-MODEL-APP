@@ -1,3 +1,4 @@
+# src/engine.py
 from __future__ import annotations
 
 import pandas as pd
@@ -56,8 +57,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
                 )
             elif 1 <= y <= n:
                 interest = bal * r
-                principal = max(0.0, pay - interest)
-                principal = min(principal, bal)
+                principal = min(max(0.0, pay - interest), bal)
                 bal2 = bal - principal
                 rows.append(
                     {
@@ -81,7 +81,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
                         "Debt_Close": 0.0,
                     }
                 )
-    else:
+    else:  # equal_principal
         principal_fixed = debt_amount / n
         for y in years:
             if y == 0:
@@ -140,25 +140,56 @@ def run_financial_model(
 
     years = list(range(0, pj.project_life + 1))
 
+    # ---------------------------
+    # CAPEX / AUGMENTATION / DECOMMISSIONING
+    # ---------------------------
     capex0 = dc.total_capex_eur
 
-    # CAPEX & DECOM
-    capex_by_year = {0: capex0}
-    decom_year = pj.project_life
-    decom_cost = cx.decommissioning_per_mw * pj.nominal_power_mw
+    # augmentation events
+    aug_years: list[int] = []
+    if cx.augmentation_year_1 and cx.augmentation_year_1 <= pj.project_life:
+        aug_years.append(int(cx.augmentation_year_1))
+    if cx.augmentation_year_2 and cx.augmentation_year_2 <= pj.project_life and cx.augmentation_year_2 != cx.augmentation_year_1:
+        aug_years.append(int(cx.augmentation_year_2))
 
+    aug_cost_each = capex0 * float(cx.battery_share_of_capex) * float(cx.augmentation_cost_pct_of_batt_capex)
+
+    # CAPEX (initial only) and Augmentation (separate column)
+    capex_by_year = {0: capex0}
+    augmentation_by_year = {y: 0.0 for y in years}
+    for y in aug_years:
+        augmentation_by_year[y] += aug_cost_each
+
+    decom_year = pj.project_life
+    decom_cost = float(cx.decommissioning_per_mw) * float(pj.nominal_power_mw)
+
+    # ---------------------------
     # DEBT
+    # ---------------------------
     debt_amount = dfp.debt_amount_eur
     debt_fees = debt_amount * fp.debt_upfront_fees_pct
     debt_df = _debt_schedule(debt_amount, fp, pj.project_life).set_index("Year")
 
-    # DEPRECIATION
+    # ---------------------------
+    # DEPRECIATION (per tranche: initial + each augmentation)
+    # ---------------------------
     dep_life = int(min(fp.depreciation_life_years, pj.project_life))
     dep_by_year = {y: 0.0 for y in years}
-    for y in range(1, dep_life + 1):
-        dep_by_year[y] = capex0 / dep_life
 
-    # REVENUES (NO NETTING)
+    # initial capex depreciates from year 1
+    for y in range(1, pj.project_life + 1):
+        if (y - 1) < dep_life:
+            dep_by_year[y] += capex0 / dep_life
+
+    # each augmentation depreciates from its year
+    for ay in aug_years:
+        for y in range(ay, pj.project_life + 1):
+            if (y - ay) < dep_life:
+                dep_by_year[y] += aug_cost_each / dep_life
+
+    # ---------------------------
+    # REVENUES (CM/MACSE + TOLLING/MERCHANT coexisting; no netting)
+    # ---------------------------
     rev_floor, rev_toll, rev_merch = {}, {}, {}
 
     def _active(y, s, e):
@@ -183,14 +214,14 @@ def run_financial_model(
         else:
             rev_floor[y] = 0.0
 
-        # TOLLING (always full MW)
-        if not rv.merchant_enabled and _active(y, rv.tolling_1_start_year, rv.tolling_1_end_year):
+        # TOLLING (full MW)
+        if (not rv.merchant_enabled) and _active(y, rv.tolling_1_start_year, rv.tolling_1_end_year):
             base = rv.tolling_base_1_per_mw_year * ((1 + rv.tolling_escalation) ** (y - 1))
-            rev_toll[y] = base * power_y * (1 + rv.tolling_profit_sharing_pct)
+            rev_toll[y] = base * power_y * (1.0 + rv.tolling_profit_sharing_pct)
         else:
             rev_toll[y] = 0.0
 
-        # MERCHANT (always full energy)
+        # MERCHANT (full energy)
         if rv.merchant_enabled:
             cycled = energy_y * (pj.soc_max - pj.soc_min)
             annual_energy = cycled * pj.cycles_per_day * dp.operating_days_per_year
@@ -199,13 +230,18 @@ def run_financial_model(
         else:
             rev_merch[y] = 0.0
 
-    # ROYALTIES
+    # ---------------------------
+    # ROYALTIES (on total revenues)
+    # ---------------------------
     upfront_pv = 0.0
     if mf.enabled and mf.discounted_upfront:
         for yy in range(1, pj.project_life + 1):
-            upfront_pv += (rev_floor[yy] + rev_toll[yy] + rev_merch[yy]) * mf.royalty_pct / ((1 + mf.discount_rate_wacc) ** (yy - 1))
+            total_yy = rev_floor[yy] + rev_toll[yy] + rev_merch[yy]
+            upfront_pv += total_yy * mf.royalty_pct / ((1 + mf.discount_rate_wacc) ** (yy - 1))
 
+    # ---------------------------
     # TAX & CASH FLOWS
+    # ---------------------------
     loss_cf = 0.0
     rows = []
 
@@ -221,7 +257,7 @@ def run_financial_model(
         if mf.enabled and y >= 1 and not mf.discounted_upfront:
             Royalty_yearly = Revenue_Total * mf.royalty_pct
 
-        Royalty_Upfront_y0 = upfront_pv if mf.enabled and mf.discounted_upfront and y == 0 else 0.0
+        Royalty_Upfront_y0 = upfront_pv if (mf.enabled and mf.discounted_upfront and y == 0) else 0.0
 
         EBITDA = Revenue_Total - OPEX - Royalty_yearly
 
@@ -250,12 +286,13 @@ def run_financial_model(
         Taxes = IRES + IRAP
 
         CAPEX = capex_by_year.get(y, 0.0)
-        Decommissioning = decom_cost if y == decom_year and y != 0 else 0.0
+        Augmentation = augmentation_by_year.get(y, 0.0)
+        Decommissioning = decom_cost if (y == decom_year and y != 0) else 0.0
 
         CFADS = EBITDA - Taxes
         DSCR = CFADS / Debt_Service if Debt_Service > 0 else None
 
-        Project_FCF = EBITDA - Taxes - CAPEX - Decommissioning - Royalty_Upfront_y0
+        Project_FCF = EBITDA - Taxes - CAPEX - Augmentation - Decommissioning - Royalty_Upfront_y0
 
         Equity_CF = (
             -(CAPEX - debt_amount) - debt_fees - Royalty_Upfront_y0
@@ -290,6 +327,7 @@ def run_financial_model(
                 "Taxes": Taxes,
 
                 "CAPEX": CAPEX,
+                "Augmentation": Augmentation,
                 "Decommissioning": Decommissioning,
 
                 "Debt_Close": Debt_Close,
