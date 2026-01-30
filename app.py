@@ -156,7 +156,10 @@ def _fmt_eur(x, d=0):
 
 
 def _plotly_png(fig, width=1600, height=900):
-    return pio.to_image(fig, format="png", width=width, height=height, scale=2)
+    try:
+        return pio.to_image(fig, format="png", width=width, height=height, scale=2)
+    except Exception:
+        return None
 
 
 def build_pdf_report_investor(
@@ -305,9 +308,24 @@ def build_pdf_report_investor(
     y_top = h - 2.7 * cm
 
     if "rev_ebitda" in figs:
-        draw_image_fit(_plotly_png(figs["rev_ebitda"]), x1, y_top, box_w, box_h)
+        img = _plotly_png(figs["rev_ebitda"])
+        if img:
+            draw_image_fit(img, x1, y_top, box_w, box_h)
+        else:
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#444444"))
+            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.setFillColor(colors.black)
+
     if "cf" in figs:
-        draw_image_fit(_plotly_png(figs["cf"]), x2, y_top, box_w, box_h)
+        img = _plotly_png(figs["cf"])
+        if img:
+            draw_image_fit(img, x1, y_top, box_w, box_h)
+        else:
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#444444"))
+            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.setFillColor(colors.black)
 
     footer(w)
     c.showPage()
@@ -319,9 +337,24 @@ def build_pdf_report_investor(
     header_bar("Charts", "Debt Service and DSCR", w, h)
 
     if "debt" in figs:
-        draw_image_fit(_plotly_png(figs["debt"]), x1, y_top, box_w, box_h)
+        img = _plotly_png(figs["debt"])
+        if img:
+            draw_image_fit(img, x1, y_top, box_w, box_h)
+        else:
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#444444"))
+            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.setFillColor(colors.black)
+
     if "dscr" in figs:
-        draw_image_fit(_plotly_png(figs["dscr"]), x2, y_top, box_w, box_h)
+        img = _plotly_png(figs["dscr"])
+        if img:
+            draw_image_fit(img, x1, y_top, box_w, box_h)
+        else:
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#444444"))
+            c.drawString(x1, y_top - 1.0*"Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
+            c.setFillColor(colors.black)
 
     footer(w)
     c.showPage()
