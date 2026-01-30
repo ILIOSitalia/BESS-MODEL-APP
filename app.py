@@ -381,8 +381,10 @@ def build_pdf_report_investor(
         "Year", "Revenue_Total", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant",
         "OPEX", "Municipality_Royalty", "EBITDA",
         "Depreciation", "Interest", "EBT", "Taxes",
+        "CAPEX", "Augmentation", "Cash Reserve",
         "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"
     ]
+
     d = df.copy()
     for col in cols:
         if col not in d.columns:
@@ -727,9 +729,7 @@ with tabs[1]:
     with k2:
         kpi_card("OPEX (€/year)", fmt_eur(opex, 0), "Total O&M/MW × Nominal Power")
     with k3:
-        kpi_card("Augmentation (€)", fmt_eur(aug_cost_each, 0), f"Per event | Events: {aug_events}")
-    with k4:
-        kpi_card("Decommissioning (€)", fmt_eur(decom_cost, 0), "€ / MW × Nominal Power")   
+        kpi_card("Augmentation (€)", fmt_eur(aug_cost_each, 0), f"Per event | Events: {aug_events}")  
 
     st.markdown("</div>", unsafe_allow_html=True)
     page_note()
