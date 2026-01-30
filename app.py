@@ -381,6 +381,7 @@ def build_pdf_report_investor(
         "Year", "Revenue_Total", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant",
         "OPEX", "Municipality_Royalty", "EBITDA",
         "Depreciation", "Interest", "EBT", "Taxes",
+        "CAPEX", "Augmentation", "Cash Reserve",
         "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"
     ]
     d = df.copy()
@@ -394,10 +395,25 @@ def build_pdf_report_investor(
     y = h - 2.9 * cm
 
     col_w = [
-        1.1 * cm, 2.3 * cm, 2.0 * cm, 2.0 * cm, 2.0 * cm,
-        1.8 * cm, 2.0 * cm, 1.8 * cm,
-        1.8 * cm, 1.8 * cm, 1.8 * cm, 1.6 * cm,
-        1.8 * cm, 1.2 * cm, 2.0 * cm, 2.0 * cm
+        1.1 * cm,  # Year
+        2.3 * cm,  # Revenue_Total
+        2.0 * cm,  # Revenue_Floor
+        2.0 * cm,  # Revenue_Tolling
+        2.0 * cm,  # Revenue_Merchant
+        1.8 * cm,  # OPEX
+        2.0 * cm,  # Municipality_Royalty
+        1.8 * cm,  # EBITDA
+        1.8 * cm,  # Depreciation
+        1.8 * cm,  # Interest
+        1.8 * cm,  # EBT
+        1.6 * cm,  # Taxes
+        1.8 * cm,  # CAPEX
+        1.8 * cm,  # Augmentation
+        1.8 * cm,  # Cash Reserve
+        1.8 * cm,  # Debt_Service
+        1.2 * cm,  # DSCR
+        2.0 * cm,  # Project_FCF
+        2.0 * cm,  # Equity_CF
     ]
 
     def draw_table_header(ypos):
