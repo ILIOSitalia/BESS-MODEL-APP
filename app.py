@@ -914,7 +914,7 @@ with tabs[5]:
 
         cols_rev = ["Year", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant", "Revenue_Total"]
         cols_pl = ["OPEX", "Municipality_Royalty", "EBITDA", "Depreciation", "Interest", "EBT", "Taxes"]
-        cols_cf = ["CAPEX", "Augmentation", "Decommissioning", "Cash_Reserve", "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"]
+        cols_cf = ["CAPEX", "Augmentation", "Decommissioning", "Cash Reserve", "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"]
 
         for col in cols_rev + cols_pl + cols_cf:
             if col not in df.columns:
