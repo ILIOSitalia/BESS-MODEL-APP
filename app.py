@@ -42,15 +42,6 @@ if _allowed:
 
 
 # ----------------------------
-# PAGE CONFIG
-# ----------------------------
-st.set_page_config(
-    page_title="BESS - Model App",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# ----------------------------
 # PREMIUM STYLE
 # ----------------------------
 st.markdown(
