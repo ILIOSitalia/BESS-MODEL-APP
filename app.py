@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from datetime import datetime
-import os   # ⬅️ AGGIUNGI QUESTO IMPORT
+import os
 
 import pandas as pd
 import streamlit as st
@@ -20,12 +20,18 @@ from src.models import ProjectData, CapexOpex, FinancialParameters, Revenues, Mu
 from src.engine import run_financial_model
 from src.kpis import calc_kpis
 
+# ----------------------------
+# PAGE CONFIG (MUST BE FIRST STREAMLIT COMMAND)
+# ----------------------------
+st.set_page_config(
+    page_title="BESS - Model App",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 # ==================================================
-# PASSWORD PROTECTION (STREAMLIT CLOUD)
+# PASSWORD PROTECTION (AFTER set_page_config)
 # ==================================================
-# In Secrets: APP_PASSWORDS = "pwd1,pwd2,pwd3"
-
 _raw = os.getenv("APP_PASSWORDS", "")
 _allowed = {p.strip() for p in _raw.split(",") if p.strip()}
 
