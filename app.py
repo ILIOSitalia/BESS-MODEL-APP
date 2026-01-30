@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from datetime import datetime
+import os   # ⬅️ AGGIUNGI QUESTO IMPORT
 
 import pandas as pd
 import streamlit as st
@@ -18,6 +19,20 @@ from reportlab.lib import colors
 from src.models import ProjectData, CapexOpex, FinancialParameters, Revenues, MunicipalityFees
 from src.engine import run_financial_model
 from src.kpis import calc_kpis
+
+
+# ==================================================
+# PASSWORD PROTECTION (STREAMLIT CLOUD)
+# ==================================================
+# In Secrets: APP_PASSWORDS = "pwd1,pwd2,pwd3"
+
+_raw = os.getenv("APP_PASSWORDS", "")
+_allowed = {p.strip() for p in _raw.split(",") if p.strip()}
+
+if _allowed:
+    pw = st.sidebar.text_input("🔒 Password", type="password")
+    if pw not in _allowed:
+        st.stop()
 
 
 # ----------------------------
