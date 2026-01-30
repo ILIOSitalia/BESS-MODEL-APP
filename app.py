@@ -689,6 +689,7 @@ with tabs[1]:
         st.number_input("Augmentation year #1", 0, 60, 0, 1, key="d_aug_y1")
         st.number_input("Augmentation year #2", 0, 60, 0, 1, key="d_aug_y2")
         num_input("Decommissioning/end-of-life (€/MW)", "d_decom_per_mw", 15000.0, 0.0, 1e9, 1000.0)
+        st.caption("If any decommissioning cost, the model will automatically calculate annual cash reserves - these will not impact on EBITDA/EBIT.")
     with c3:
         num_input("Fixed O&M (€/MW·year)", "d_om_fixed", 8000.0, 0.0, 1e9, 100.0)
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)
@@ -913,7 +914,7 @@ with tabs[5]:
 
         cols_rev = ["Year", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant", "Revenue_Total"]
         cols_pl = ["OPEX", "Municipality_Royalty", "EBITDA", "Depreciation", "Interest", "EBT", "Taxes"]
-        cols_cf = ["CAPEX", "Augmentation", "Decommissioning", "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"]
+        cols_cf = ["CAPEX", "Augmentation", "Decommissioning", "Cash_Reserve", "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"]
 
         for col in cols_rev + cols_pl + cols_cf:
             if col not in df.columns:
