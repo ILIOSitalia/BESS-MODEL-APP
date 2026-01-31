@@ -1034,5 +1034,14 @@ with tabs[6]:
             mime="application/pdf",
         )
 
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "Download CSV (full model)",
+            data=csv_bytes,
+            file_name="BESS_Model_FullOutput.csv",
+            mime="text/csv",
+        )
+
         st.markdown("</div>", unsafe_allow_html=True)
         page_note()
