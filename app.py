@@ -914,10 +914,6 @@ with tabs[4]:
         if bool(st.session_state.get("d_merch_on", False)) and can_enable_merchant:
             num_input("Merchant selling price (€/MWh)", "d_merch_price", 120.0, 0.0, 1e6, 1.0)
             pct_input("Merchant escalation (%/year)", "d_merch_esc", "d_merch_esc_ui", 2.0, 0.0, 50.0, 0.1)
-        else:
-            # keep keys stable
-            st.session_state.setdefault("d_merch_price", 120.0)
-            st.session_state.setdefault("d_merch_esc", 0.02)
 
     st.markdown("</div>", unsafe_allow_html=True)
     page_note()
