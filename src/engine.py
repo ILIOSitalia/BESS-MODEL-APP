@@ -159,7 +159,8 @@ def run_financial_model(
         augmentation_by_year[y] += aug_cost_each
 
     # ---------------------------
-    # CASH RESERVE (automatic, for decommissioning)
+    # CASH RESERVE (automatic, for decommissioning sizing only)
+    # Reserve is an annual contribution (years 1..life-1). No decommissioning booked.
     # ---------------------------
     decom_cost = float(cx.decommissioning_per_mw) * float(pj.nominal_power_mw)
 
@@ -182,10 +183,12 @@ def run_financial_model(
     dep_life = int(min(fp.depreciation_life_years, pj.project_life))
     dep_by_year = {y: 0.0 for y in years}
 
+    # initial capex depreciates from year 1
     for y in range(1, pj.project_life + 1):
         if (y - 1) < dep_life:
             dep_by_year[y] += capex0 / dep_life
 
+    # each augmentation depreciates from its year
     for ay in aug_years:
         for y in range(ay, pj.project_life + 1):
             if (y - ay) < dep_life:
@@ -193,11 +196,16 @@ def run_financial_model(
 
     # ---------------------------
     # REVENUES
+    # IMPROVEMENT 1:
+    # - Tolling active only within [tolling_1_start_year .. tolling_1_end_year]
+    # - Merchant (if enabled) starts ONLY after tolling_1_end_year
     # ---------------------------
     rev_floor, rev_toll, rev_merch = {}, {}, {}
 
-    def _active(y, s, e):
-        return s > 0 and e > 0 and s <= y <= e
+    def _active(y: int, s: int, e: int) -> bool:
+        return (s > 0 and e > 0 and s <= y <= e)
+
+    tolling_end = int(getattr(rv, "tolling_1_end_year", 0) or 0)
 
     for y in years:
         if y == 0:
@@ -208,6 +216,7 @@ def run_financial_model(
         power_y = pj.nominal_power_mw * f_deg
         energy_y = pj.nominal_energy_mwh * f_deg
 
+        # FLOOR
         if rv.floor_type == "CM" and y <= rv.cm_duration_years:
             price = rv.cm_price_per_mw_year * ((1 + rv.cm_escalation) ** (y - 1))
             rev_floor[y] = price * power_y * rv.cm_share_of_mw
@@ -217,13 +226,16 @@ def run_financial_model(
         else:
             rev_floor[y] = 0.0
 
-        if (not rv.merchant_enabled) and _active(y, rv.tolling_1_start_year, rv.tolling_1_end_year):
+        # TOLLING (only in its duration)
+        if _active(y, int(rv.tolling_1_start_year), int(rv.tolling_1_end_year)):
             base = rv.tolling_base_1_per_mw_year * ((1 + rv.tolling_escalation) ** (y - 1))
             rev_toll[y] = base * power_y * (1.0 + rv.tolling_profit_sharing_pct)
         else:
             rev_toll[y] = 0.0
 
-        if rv.merchant_enabled:
+        # MERCHANT (starts after tolling end; 0 if tolling_end==0 => starts in year 1)
+        merchant_active = bool(rv.merchant_enabled) and (y > tolling_end)
+        if merchant_active:
             cycled = energy_y * (pj.soc_max - pj.soc_min)
             annual_energy = cycled * pj.cycles_per_day * dp.operating_days_per_year
             price = rv.merchant_selling_price_per_mwh * ((1 + rv.merchant_price_escalation) ** (y - 1))
