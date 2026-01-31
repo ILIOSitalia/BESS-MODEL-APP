@@ -243,6 +243,12 @@ def run_financial_model(
         else:
             rev_merch[y] = 0.0
 
+        # Terminal Value: add to last year total revenues (no dedicated column)
+        if y == pj.project_life and getattr(rv, "terminal_value_enabled", False):
+            tv = float(getattr(rv, "terminal_value_per_mw", 0.0)) * float(pj.nominal_power_mw)
+            # add to floor bucket (arbitrary) so total increases, without extra column
+            rev_floor[y] += tv
+
     # ---------------------------
     # ROYALTIES
     # ---------------------------

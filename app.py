@@ -572,6 +572,9 @@ def build_draft_objects():
         merchant_enabled=merchant_enabled,
         merchant_selling_price_per_mwh=float(st.session_state.get("d_merch_price", 120.0)),
         merchant_price_escalation=float(st.session_state.get("d_merch_esc", 0.02)),
+
+        terminal_value_enabled=bool(st.session_state.get("d_tv_on", False)),
+        terminal_value_per_mw=float(st.session_state.get("d_tv_per_mw", 0.0)),
     )
 
 
@@ -643,6 +646,7 @@ tabs = st.tabs(
         "FINANCIAL PARAMETERS",
         "MUNICIPALITY FEES / ROYALTIES",
         "REVENUES",
+        "TERMINAL VALUE",
         "RESULTS",
     ]
 )
@@ -920,9 +924,25 @@ with tabs[4]:
 
 
 # ----------------------------
-# TAB 6: RESULTS
+# TAB 6: TERMINAL VALUE
 # ----------------------------
 with tabs[5]:
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">TERMINAL VALUE</div>', unsafe_allow_html=True)
+
+    st.toggle("Enable Terminal Value?", key="d_tv_on")
+    num_input("Terminal Value (€/MW)", "d_tv_per_mw", 0.0, 0.0, 1e12, 1000.0)
+
+    st.caption("If enabled, Terminal Value will be added to the last year's total revenues (no dedicated column in RESULTS).")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    page_note()
+
+
+# ----------------------------
+# TAB 7: RESULTS
+# ----------------------------
+with tabs[6]:
     df = st.session_state.get("active_df", None)
     fp_active = st.session_state.get("active_fp", None)
 

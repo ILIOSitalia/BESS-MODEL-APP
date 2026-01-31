@@ -133,3 +133,6 @@ class Revenues(BaseModel):
         if s > 0 and v > 0 and v < s:
             raise ValueError("Tolling 2 end must be >= Tolling 2 start")
         return v
+    
+    terminal_value_enabled: bool = False
+    terminal_value_per_mw: float = 0.0
