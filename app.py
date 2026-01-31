@@ -20,6 +20,7 @@ from src.models import ProjectData, CapexOpex, FinancialParameters, Revenues, Mu
 from src.engine import run_financial_model
 from src.kpis import calc_kpis
 
+
 # ----------------------------
 # PAGE CONFIG (MUST BE FIRST STREAMLIT COMMAND)
 # ----------------------------
@@ -198,7 +199,6 @@ def build_pdf_report_investor(
         return landscape(A4)
 
     def header_bar(title: str, subtitle: str, w: float, h: float):
-        # Barra blu scuro
         bar_h = 1.55 * cm
         c.setFillColor(DARK_BLUE)
         c.rect(0, h - bar_h, w, bar_h, fill=1, stroke=0)
@@ -209,7 +209,6 @@ def build_pdf_report_investor(
 
         c.setFont("Helvetica", 8.8)
         c.drawRightString(w - 2 * cm, h - 1.08 * cm, subtitle)
-
         c.setFillColor(colors.black)
 
     def footer(w: float):
@@ -242,15 +241,26 @@ def build_pdf_report_investor(
             ww = hh * aspect
         c.drawImage(img, x + (w_box - ww) / 2, y_top - hh - (h_box - hh) / 2, width=ww, height=hh, mask="auto")
 
+    def draw_data_preview(title: str, series: pd.DataFrame, x: float, y_top: float):
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(colors.black)
+        c.drawString(x, y_top - 0.8 * cm, title)
+
+        c.setFont("Helvetica", 8)
+        y = y_top - 1.4 * cm
+        for i in range(min(len(series), 6)):
+            row = series.iloc[i]
+            c.drawString(x, y, f"Y{int(row['Year'])}: {float(row['Value']):.0f}")
+            y -= 0.45 * cm
+
     generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # =========================
-    # PAGE 1: PORTRAIT COVER/SUMMARY (2 columns -> no overlap)
+    # PAGE 1: PORTRAIT COVER/SUMMARY
     # =========================
     w, h = set_portrait()
     header_bar("BESS – Model App | Report", f"Generated: {generated}", w, h)
 
-    # Titolo grande
     c.setFont("Helvetica-Bold", 18)
     c.setFillColor(colors.HexColor("#111111"))
     c.drawString(2 * cm, h - 3.0 * cm, "BESS Financial Model")
@@ -260,7 +270,6 @@ def build_pdf_report_investor(
     c.drawString(2 * cm, h - 3.65 * cm, f"Floor: {rv.floor_type} | Royalties: {'YES' if mf.enabled else 'NO'}")
     c.setFillColor(colors.black)
 
-    # 2 colonne
     top_y = h - 4.7 * cm
     col_gap = 1.0 * cm
     left_x = 2 * cm
@@ -268,7 +277,6 @@ def build_pdf_report_investor(
     colw1 = 6.0 * cm
     colw2 = (w / 2 - 2 * cm - col_gap / 2)
 
-    # KPI (sinistra)
     c.setFont("Helvetica-Bold", 11)
     c.drawString(left_x, top_y, "Key KPIs")
     y_left = top_y - 0.65 * cm
@@ -281,9 +289,8 @@ def build_pdf_report_investor(
         ("Discount rate (Equity)", _fmt_pct(kpi.get("discount_rate_equity"))),
         ("Discount rate (Project)", _fmt_pct(kpi.get("discount_rate_project"))),
     ]
-    y_left = draw_kv_table(left_x, y_left, rows_kpi, colw1=colw1, colw2=colw2, row_h=0.55 * cm)
+    draw_kv_table(left_x, y_left, rows_kpi, colw1=colw1, colw2=colw2, row_h=0.55 * cm)
 
-    # Inputs snapshot (destra)
     c.setFont("Helvetica-Bold", 11)
     c.drawString(right_x, top_y, "Inputs snapshot")
     y_right = top_y - 0.65 * cm
@@ -295,7 +302,7 @@ def build_pdf_report_investor(
         ("Cycles/day", f"{pj.cycles_per_day:.2f}"),
         ("SOC min / max", f"{pj.soc_min:.2f} / {pj.soc_max:.2f}"),
         ("Unavailability", _fmt_pct(pj.grid_system_unavailability)),
-        ("CAPEX €/MW", f"{cx.initial_capex_per_mw:,.0f}"),
+        ("CAPEX €/MW", f"{getattr(cx, 'initial_capex_per_mw', 0.0):,.0f}"),
         ("Debt %", _fmt_pct(fp.debt_pct_on_capex)),
         ("Interest rate", _fmt_pct(fp.interest_rate)),
         ("IRES / IRAP", f"{fp.ires*100:.1f}% / {fp.irap*100:.1f}%"),
@@ -308,7 +315,7 @@ def build_pdf_report_investor(
     c.showPage()
 
     # =========================
-    # PAGE 2: LANDSCAPE CHARTS (2 big)
+    # PAGE 2: LANDSCAPE CHARTS
     # =========================
     w, h = set_landscape()
     header_bar("Charts", "Revenues and Cash Flows", w, h)
@@ -319,31 +326,37 @@ def build_pdf_report_investor(
     x2 = 2 * cm + box_w + 1.0 * cm
     y_top = h - 2.7 * cm
 
+    # LEFT: rev_ebitda
     if "rev_ebitda" in figs:
         img = _plotly_png(figs["rev_ebitda"])
         if img:
             draw_image_fit(img, x1, y_top, box_w, box_h)
         else:
-            c.setFont("Helvetica", 9)
-            c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
-            c.setFillColor(colors.black)
+            tmp = df.loc[df["Year"] <= 6, ["Year", "Revenue_Total"]].copy()
+            tmp.columns = ["Year", "Value"]
+            draw_data_preview("Revenue_Total (preview)", tmp, x1, y_top)
+            tmp2 = df.loc[df["Year"] <= 6, ["Year", "EBITDA"]].copy()
+            tmp2.columns = ["Year", "Value"]
+            draw_data_preview("EBITDA (preview)", tmp2, x1 + 7.0 * cm, y_top)
 
+    # RIGHT: cf
     if "cf" in figs:
         img = _plotly_png(figs["cf"])
         if img:
-            draw_image_fit(img, x1, y_top, box_w, box_h)
+            draw_image_fit(img, x2, y_top, box_w, box_h)
         else:
-            c.setFont("Helvetica", 9)
-            c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
-            c.setFillColor(colors.black)
+            tmp = df.loc[df["Year"] <= 6, ["Year", "Project_FCF"]].copy()
+            tmp.columns = ["Year", "Value"]
+            draw_data_preview("Project_FCF (preview)", tmp, x2, y_top)
+            tmp2 = df.loc[df["Year"] <= 6, ["Year", "Equity_CF"]].copy()
+            tmp2.columns = ["Year", "Value"]
+            draw_data_preview("Equity_CF (preview)", tmp2, x2 + 7.0 * cm, y_top)
 
     footer(w)
     c.showPage()
 
     # =========================
-    # PAGE 3: LANDSCAPE CHARTS (2 big)
+    # PAGE 3: LANDSCAPE CHARTS
     # =========================
     w, h = set_landscape()
     header_bar("Charts", "Debt Service and DSCR", w, h)
@@ -353,26 +366,25 @@ def build_pdf_report_investor(
         if img:
             draw_image_fit(img, x1, y_top, box_w, box_h)
         else:
-            c.setFont("Helvetica", 9)
-            c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
-            c.setFillColor(colors.black)
+            tmp = df.loc[df["Year"] <= 6, ["Year", "Debt_Service"]].copy()
+            tmp.columns = ["Year", "Value"]
+            draw_data_preview("Debt_Service (preview)", tmp, x1, y_top)
 
     if "dscr" in figs:
         img = _plotly_png(figs["dscr"])
         if img:
-            draw_image_fit(img, x1, y_top, box_w, box_h)
+            draw_image_fit(img, x2, y_top, box_w, box_h)
         else:
-            c.setFont("Helvetica", 9)
-            c.setFillColor(colors.HexColor("#444444"))
-            c.drawString(x1, y_top - 1.0*cm, "Chart unavailable on cloud runtime (missing Chrome/Kaleido).")
-            c.setFillColor(colors.black)
+            tmp = df.loc[df["Year"] <= 6, ["Year", "DSCR"]].copy()
+            tmp["DSCR"] = pd.to_numeric(tmp["DSCR"], errors="coerce").fillna(0.0)
+            tmp.columns = ["Year", "Value"]
+            draw_data_preview("DSCR (preview)", tmp, x2, y_top)
 
     footer(w)
     c.showPage()
 
     # =========================
-    # RESULTS TABLE: LANDSCAPE (paginated)
+    # RESULTS TABLE: LANDSCAPE (paginated) — FIXED FIT
     # =========================
     w, h = set_landscape()
     header_bar("Results table", "Main yearly outputs", w, h)
@@ -390,41 +402,27 @@ def build_pdf_report_investor(
             d[col] = 0.0
     d = d[cols].copy()
 
-    c.setFont("Helvetica-Bold", 8)
+    c.setFont("Helvetica-Bold", 6.5)
     x0 = 1.2 * cm
     y = h - 2.9 * cm
 
     col_w = [
-        1.1 * cm,  # Year
-        2.3 * cm,  # Revenue_Total
-        2.0 * cm,  # Revenue_Floor
-        2.0 * cm,  # Revenue_Tolling
-        2.0 * cm,  # Revenue_Merchant
-        1.8 * cm,  # OPEX
-        2.0 * cm,  # Municipality_Royalty
-        1.8 * cm,  # EBITDA
-        1.8 * cm,  # Depreciation
-        1.8 * cm,  # Interest
-        1.8 * cm,  # EBT
-        1.6 * cm,  # Taxes
-        1.8 * cm,  # CAPEX
-        1.8 * cm,  # Augmentation
-        1.8 * cm,  # Cash Reserve
-        1.8 * cm,  # Debt_Service
-        1.2 * cm,  # DSCR
-        2.0 * cm,  # Project_FCF
-        2.0 * cm,  # Equity_CF
-    ]
+        1.0 * cm, 2.0 * cm, 1.6 * cm, 1.6 * cm, 1.6 * cm,
+        1.4 * cm, 1.7 * cm, 1.4 * cm,
+        1.4 * cm, 1.4 * cm, 1.4 * cm, 1.2 * cm,
+        1.4 * cm, 1.4 * cm, 1.4 * cm,
+        1.4 * cm, 1.0 * cm, 1.6 * cm, 1.6 * cm
+    ]  # len = 19
 
     def draw_table_header(ypos):
         x = x0
         for i, col in enumerate(cols):
-            c.drawString(x, ypos, col[:16])
+            c.drawString(x, ypos, col[:10])
             x += col_w[i]
-        return ypos - 0.55 * cm
+        return ypos - 0.40 * cm
 
     y = draw_table_header(y)
-    c.setFont("Helvetica", 7.5)
+    c.setFont("Helvetica", 6.0)
 
     max_y = 1.8 * cm
     for i in range(len(d)):
@@ -433,9 +431,10 @@ def build_pdf_report_investor(
             c.showPage()
             w, h = set_landscape()
             header_bar("Results table (cont.)", "", w, h)
+            c.setFont("Helvetica-Bold", 6.5)
             y = h - 2.9 * cm
             y = draw_table_header(y)
-            c.setFont("Helvetica", 7.5)
+            c.setFont("Helvetica", 6.0)
 
         row = d.iloc[i]
         x = x0
@@ -447,9 +446,9 @@ def build_pdf_report_investor(
                 txt = "" if pd.isna(v) else f"{float(v):.3f}"
             else:
                 txt = "" if pd.isna(v) else f"{float(v):.0f}"
-            c.drawString(x, y, txt[:16])
+            c.drawString(x, y, txt[:10])
             x += col_w[j]
-        y -= 0.48 * cm
+        y -= 0.35 * cm
 
     footer(w)
     c.save()
@@ -531,15 +530,12 @@ def build_draft_objects():
 
     floor_type = st.session_state.get("d_floor_type", "CM")
 
-    # Tolling is always active when base>0, but limited by Tolling duration
     tolling_base = float(st.session_state.get("d_toll_base", 60000.0))
     toll_years = int(st.session_state.get("d_toll_years", 0))
 
-    # Merchant can start only after tolling_end and only if life > toll_years
     merchant_allowed = (project_life > toll_years)
     merchant_enabled = bool(st.session_state.get("d_merch_on", False)) and merchant_allowed
 
-    # Tolling end year = min(project life, toll_years). If toll_years=0 => tolling disabled (end=0)
     tolling_end_year = min(project_life, toll_years) if toll_years > 0 and tolling_base > 0 else 0
     tolling_start_year = 1 if tolling_end_year > 0 else 0
 
@@ -576,7 +572,6 @@ def build_draft_objects():
         terminal_value_enabled=bool(st.session_state.get("d_tv_on", False)),
         terminal_value_per_mw=float(st.session_state.get("d_tv_per_mw", 0.0)),
     )
-
 
     apply_degradation = bool(st.session_state.get("d_degrade_energy", True))
 
@@ -723,9 +718,6 @@ with tabs[1]:
         num_input("Fixed O&M (€/MW·year)", "d_om_fixed", 8000.0, 0.0, 1e9, 100.0)
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)
 
-    # ----------------------------
-    # CALCULATED (CAPEX / OPEX / AUG / DECOM)
-    # ----------------------------
     nominal_energy = float(st.session_state.get("d_nominal_energy", 200.0))
     nominal_power = float(st.session_state.get("d_nominal_power", 50.0))
 
@@ -739,12 +731,11 @@ with tabs[1]:
 
     batt_share = float(st.session_state.get("d_batt_share", 0.60))
     aug_pct = float(st.session_state.get("d_aug_pct", 0.25))
-    aug_cost_each = total_capex * batt_share * aug_pct  # per event (come engine)
+    aug_cost_each = total_capex * batt_share * aug_pct
 
     aug_y1 = int(st.session_state.get("d_aug_y1", 0))
     aug_y2 = int(st.session_state.get("d_aug_y2", 0))
     aug_events = len({y for y in [aug_y1, aug_y2] if y > 0})
-    aug_total = aug_cost_each * aug_events
 
     decom_per_mw = float(st.session_state.get("d_decom_per_mw", 15000.0))
     decom_cost = decom_per_mw * nominal_power
@@ -758,7 +749,7 @@ with tabs[1]:
     with k3:
         kpi_card("Augmentation (€)", fmt_eur(aug_cost_each, 0), f"Per event | Events: {aug_events}")
     with k4:
-        kpi_card("Decommissioning (€)", fmt_eur(decom_cost, 0), "€ / MW × Nominal Power")   
+        kpi_card("Decommissioning (€)", fmt_eur(decom_cost, 0), "€ / MW × Nominal Power")
 
     st.markdown("</div>", unsafe_allow_html=True)
     page_note()
@@ -787,10 +778,6 @@ with tabs[2]:
         pct_input("IRAP (%)", "d_irap", "d_irap_ui", 3.9, 0.0, 20.0, 0.1)
         pct_input("Discount rate - Equity NPV (%)", "d_disc_eq", "d_disc_eq_ui", 10.0, 0.0, 40.0, 0.1)
 
-    # ----------------------------
-    # CALCULATED (DEBT / EQUITY / WACC-like)
-    # ----------------------------
-    # total capex (same as CAPEX tab): Nominal Energy × CAPEX €/MWh
     nominal_energy = float(st.session_state.get("d_nominal_energy", 200.0))
     capex_per_mw = float(st.session_state.get("d_capex_per_mw", 250000.0))
     total_capex = nominal_energy * capex_per_mw
@@ -807,8 +794,6 @@ with tabs[2]:
     rd = float(st.session_state.get("d_interest", 0.055))
     D = debt_pct
     E = 1.0 - debt_pct
-
-    # Project discount rate (WACC-style): E*Re + D*Rd*(1 - IRES)
     wacc_like = E * re + D * rd * (1.0 - ires)
 
     st.divider()
@@ -843,7 +828,6 @@ with tabs[3]:
         pct_input("Discount rate (WACC) (%)", "d_muni_wacc", "d_muni_wacc_ui", 8.0, 0.0, 40.0, 0.1)
 
     st.divider()
-
     df = st.session_state.get("active_df", None)
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         st.info("Run 'Apply changes' to compute royalties.")
@@ -891,21 +875,18 @@ with tabs[4]:
             pct_input("MACSE escalation (%/year)", "d_macse_esc", "d_macse_esc_ui", 0.0, 0.0, 20.0, 0.1)
 
     with c2:
-        # Tolling is always configured here.
         st.markdown("**Tolling**")
         num_input("Tolling base (€/MW·year)", "d_toll_base", 60000.0, 0.0, 1e9, 1000.0)
         pct_input("Tolling escalation (%/year)", "d_toll_esc", "d_toll_esc_ui", 2.0, 0.0, 50.0, 0.1)
         pct_input("Tolling extra income (% on Tolling Revenues)", "d_toll_extra_pct", "d_toll_extra_pct_ui", 0.0, 0.0, 100.0, 0.5)
-
-        # NEW: Tolling duration
         st.number_input("Tolling duration (years)", 0, 60, 0, 1, key="d_toll_years")
-        st.caption("Merchant can be enabled only if Project Lifetime > Tolling duration (Merchant starts from year T+1).")
+
+        st.divider()
 
         project_life = int(st.session_state.get("d_project_life", 0))
         toll_years = int(st.session_state.get("d_toll_years", 0))
         can_enable_merchant = (project_life > toll_years)
 
-        # Merchant after Tolling
         st.markdown("**Merchant (after Tolling)**")
         st.toggle("Enable Merchant after Tolling", key="d_merch_on", disabled=not can_enable_merchant)
         if not can_enable_merchant and bool(st.session_state.get("d_merch_on", False)):
@@ -928,7 +909,6 @@ with tabs[5]:
 
     st.toggle("Enable Terminal Value?", key="d_tv_on")
     num_input("Terminal Value (€/MW)", "d_tv_per_mw", 0.0, 0.0, 1e12, 1000.0)
-
     st.caption("If enabled, Terminal Value will be added to the last year's total revenues (no dedicated column in RESULTS).")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -992,7 +972,6 @@ with tabs[6]:
 
         st.divider()
 
-        # Charts
         c1, c2 = st.columns(2)
         with c1:
             fig1 = px.line(df, x="Year", y=["Revenue_Total", "EBITDA"], markers=False)
@@ -1035,7 +1014,6 @@ with tabs[6]:
         )
 
         csv_bytes = df.to_csv(index=False).encode("utf-8")
-
         st.download_button(
             "Download CSV (full model)",
             data=csv_bytes,
