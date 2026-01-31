@@ -24,7 +24,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
     r = float(fp.interest_rate)
 
     years = list(range(0, project_life + 1))
-    bal = debt_amount
+    bal = float(debt_amount)
     rows = []
 
     if n <= 0 or debt_amount <= 0:
@@ -52,7 +52,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
                         "Interest": 0.0,
                         "Principal": 0.0,
                         "Debt_Service": 0.0,
-                        "Debt_Close": debt_amount,
+                        "Debt_Close": float(debt_amount),
                     }
                 )
             elif 1 <= y <= n:
@@ -82,7 +82,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
                     }
                 )
     else:  # equal_principal
-        principal_fixed = debt_amount / n
+        principal_fixed = float(debt_amount) / n
         for y in years:
             if y == 0:
                 rows.append(
@@ -92,7 +92,7 @@ def _debt_schedule(debt_amount: float, fp: FinancialParameters, project_life: in
                         "Interest": 0.0,
                         "Principal": 0.0,
                         "Debt_Service": 0.0,
-                        "Debt_Close": debt_amount,
+                        "Debt_Close": float(debt_amount),
                     }
                 )
             elif 1 <= y <= n:
@@ -141,9 +141,9 @@ def run_financial_model(
     years = list(range(0, pj.project_life + 1))
 
     # ---------------------------
-    # CAPEX & AUGMENTATION
+    # CAPEX & AUGMENTATION (separate column)
     # ---------------------------
-    capex0 = dc.total_capex_eur
+    capex0 = float(dc.total_capex_eur)
 
     aug_years: list[int] = []
     if cx.augmentation_year_1 and cx.augmentation_year_1 <= pj.project_life:
@@ -159,22 +159,55 @@ def run_financial_model(
         augmentation_by_year[y] += aug_cost_each
 
     # ---------------------------
-    # CASH RESERVE (automatic, for decommissioning sizing only)
-    # Reserve is an annual contribution (years 1..life-1). No decommissioning booked.
+    # CASH RESERVE (transparent)
+    # - contributions years 1..life-1
+    # - release at year life
+    # - interest optional (0 by default)
     # ---------------------------
     decom_cost = float(cx.decommissioning_per_mw) * float(pj.nominal_power_mw)
 
-    reserve_by_year = {y: 0.0 for y in years}
-    if decom_cost > 0 and pj.project_life > 1:
-        annual_contribution = decom_cost / (pj.project_life - 1)
-        for y in range(1, pj.project_life):
-            reserve_by_year[y] = -annual_contribution
+    reserve_contribution_by_year = {y: 0.0 for y in years}
+    reserve_interest_by_year = {y: 0.0 for y in years}
+    reserve_release_by_year = {y: 0.0 for y in years}
+    reserve_balance_by_year = {y: 0.0 for y in years}
+
+    reserve_yield = 0.0  # no interest for now
+    target = decom_cost
+
+    if target > 0 and pj.project_life > 1:
+        annual_contribution = target / (pj.project_life - 1)
+
+        balance = 0.0
+        for y in years:
+            if y == 0:
+                reserve_balance_by_year[y] = 0.0
+                continue
+
+            # interest on opening balance
+            interest = balance * reserve_yield
+            reserve_interest_by_year[y] = interest
+            balance += interest
+
+            # contribution until target reached, only in years 1..life-1
+            contrib = 0.0
+            if y < pj.project_life and balance < target:
+                contrib = min(annual_contribution, target - balance)
+                balance += contrib
+            reserve_contribution_by_year[y] = -contrib  # negative cash flow
+
+            # release full balance at end of life
+            if y == pj.project_life:
+                reserve_release_by_year[y] = balance  # positive cash flow
+                reserve_balance_by_year[y] = balance
+                balance = 0.0
+            else:
+                reserve_balance_by_year[y] = balance
 
     # ---------------------------
     # DEBT
     # ---------------------------
-    debt_amount = dfp.debt_amount_eur
-    debt_fees = debt_amount * fp.debt_upfront_fees_pct
+    debt_amount = float(dfp.debt_amount_eur)
+    debt_fees = debt_amount * float(fp.debt_upfront_fees_pct)
     debt_df = _debt_schedule(debt_amount, fp, pj.project_life).set_index("Year")
 
     # ---------------------------
@@ -213,41 +246,40 @@ def run_financial_model(
             continue
 
         f_deg = _degrade_factor(pj.degradation_rate, y) if apply_degradation else 1.0
-        power_y = pj.nominal_power_mw * f_deg
-        energy_y = pj.nominal_energy_mwh * f_deg
+        power_y = float(pj.nominal_power_mw) * f_deg
+        energy_y = float(pj.nominal_energy_mwh) * f_deg
 
         # FLOOR
-        if rv.floor_type == "CM" and y <= rv.cm_duration_years:
-            price = rv.cm_price_per_mw_year * ((1 + rv.cm_escalation) ** (y - 1))
-            rev_floor[y] = price * power_y * rv.cm_share_of_mw
-        elif rv.floor_type == "MACSE" and y <= rv.macse_duration_years:
-            price = rv.macse_price_per_mwh * ((1 + rv.macse_escalation) ** (y - 1))
-            rev_floor[y] = price * energy_y * rv.macse_share_of_nom_energy
+        if rv.floor_type == "CM" and y <= int(rv.cm_duration_years):
+            price = float(rv.cm_price_per_mw_year) * ((1 + float(rv.cm_escalation)) ** (y - 1))
+            rev_floor[y] = price * power_y * float(rv.cm_share_of_mw)
+        elif rv.floor_type == "MACSE" and y <= int(rv.macse_duration_years):
+            price = float(rv.macse_price_per_mwh) * ((1 + float(rv.macse_escalation)) ** (y - 1))
+            rev_floor[y] = price * energy_y * float(rv.macse_share_of_nom_energy)
         else:
             rev_floor[y] = 0.0
 
+        # Terminal Value (added into last year's revenues; no dedicated column)
+        if y == pj.project_life and getattr(rv, "terminal_value_enabled", False):
+            tv = float(getattr(rv, "terminal_value_per_mw", 0.0)) * float(pj.nominal_power_mw)
+            rev_floor[y] += tv
+
         # TOLLING (only in its duration)
         if _active(y, int(rv.tolling_1_start_year), int(rv.tolling_1_end_year)):
-            base = rv.tolling_base_1_per_mw_year * ((1 + rv.tolling_escalation) ** (y - 1))
-            rev_toll[y] = base * power_y * (1.0 + rv.tolling_profit_sharing_pct)
+            base = float(rv.tolling_base_1_per_mw_year) * ((1 + float(rv.tolling_escalation)) ** (y - 1))
+            rev_toll[y] = base * power_y * (1.0 + float(rv.tolling_profit_sharing_pct))
         else:
             rev_toll[y] = 0.0
 
-        # MERCHANT (starts after tolling end; 0 if tolling_end==0 => starts in year 1)
+        # MERCHANT starts after tolling end
         merchant_active = bool(rv.merchant_enabled) and (y > tolling_end)
         if merchant_active:
-            cycled = energy_y * (pj.soc_max - pj.soc_min)
-            annual_energy = cycled * pj.cycles_per_day * dp.operating_days_per_year
-            price = rv.merchant_selling_price_per_mwh * ((1 + rv.merchant_price_escalation) ** (y - 1))
+            cycled = energy_y * (float(pj.soc_max) - float(pj.soc_min))
+            annual_energy = cycled * float(pj.cycles_per_day) * float(dp.operating_days_per_year)
+            price = float(rv.merchant_selling_price_per_mwh) * ((1 + float(rv.merchant_price_escalation)) ** (y - 1))
             rev_merch[y] = annual_energy * price
         else:
             rev_merch[y] = 0.0
-
-        # Terminal Value: add to last year total revenues (no dedicated column)
-        if y == pj.project_life and getattr(rv, "terminal_value_enabled", False):
-            tv = float(getattr(rv, "terminal_value_per_mw", 0.0)) * float(pj.nominal_power_mw)
-            # add to floor bucket (arbitrary) so total increases, without extra column
-            rev_floor[y] += tv
 
     # ---------------------------
     # ROYALTIES
@@ -255,8 +287,8 @@ def run_financial_model(
     upfront_pv = 0.0
     if mf.enabled and mf.discounted_upfront:
         for yy in range(1, pj.project_life + 1):
-            total_yy = rev_floor[yy] + rev_toll[yy] + rev_merch[yy]
-            upfront_pv += total_yy * mf.royalty_pct / ((1 + mf.discount_rate_wacc) ** (yy - 1))
+            total_yy = float(rev_floor[yy]) + float(rev_toll[yy]) + float(rev_merch[yy])
+            upfront_pv += total_yy * float(mf.royalty_pct) / ((1 + float(mf.discount_rate_wacc)) ** (yy - 1))
 
     # ---------------------------
     # TAX & CASH FLOWS
@@ -265,26 +297,26 @@ def run_financial_model(
     rows = []
 
     for y in years:
-        Revenue_Floor = rev_floor[y]
-        Revenue_Tolling = rev_toll[y]
-        Revenue_Merchant = rev_merch[y]
+        Revenue_Floor = float(rev_floor[y])
+        Revenue_Tolling = float(rev_toll[y])
+        Revenue_Merchant = float(rev_merch[y])
         Revenue_Total = Revenue_Floor + Revenue_Tolling + Revenue_Merchant
 
-        OPEX = 0.0 if y == 0 else dc.opex_eur_year
+        OPEX = 0.0 if y == 0 else float(dc.opex_eur_year)
 
         Royalty_yearly = 0.0
         if mf.enabled and y >= 1 and not mf.discounted_upfront:
-            Royalty_yearly = Revenue_Total * mf.royalty_pct
+            Royalty_yearly = Revenue_Total * float(mf.royalty_pct)
 
         Royalty_Upfront_y0 = upfront_pv if (mf.enabled and mf.discounted_upfront and y == 0) else 0.0
 
         EBITDA = Revenue_Total - OPEX - Royalty_yearly
 
-        Depreciation = dep_by_year[y]
-        Interest = debt_df.loc[y, "Interest"] if y in debt_df.index else 0.0
-        Principal = debt_df.loc[y, "Principal"] if y in debt_df.index else 0.0
-        Debt_Service = debt_df.loc[y, "Debt_Service"] if y in debt_df.index else 0.0
-        Debt_Close = debt_df.loc[y, "Debt_Close"] if y in debt_df.index else 0.0
+        Depreciation = float(dep_by_year[y])
+        Interest = float(debt_df.loc[y, "Interest"]) if y in debt_df.index else 0.0
+        Principal = float(debt_df.loc[y, "Principal"]) if y in debt_df.index else 0.0
+        Debt_Service = float(debt_df.loc[y, "Debt_Service"]) if y in debt_df.index else 0.0
+        Debt_Close = float(debt_df.loc[y, "Debt_Close"]) if y in debt_df.index else 0.0
 
         EBT = EBITDA - Depreciation - Interest
 
@@ -299,24 +331,42 @@ def run_financial_model(
                 ires_taxable = EBT - loss_used
                 loss_cf -= loss_used
 
-        IRES = ires_taxable * fp.ires
+        IRES = ires_taxable * float(fp.ires)
         irap_base = max(0.0, EBITDA - Depreciation) if y >= 1 else 0.0
-        IRAP = irap_base * fp.irap
+        IRAP = irap_base * float(fp.irap)
         Taxes = IRES + IRAP
 
-        CAPEX = capex_by_year.get(y, 0.0)
-        Augmentation = augmentation_by_year.get(y, 0.0)
-        Cash_Reserve = reserve_by_year.get(y, 0.0)
+        CAPEX = float(capex_by_year.get(y, 0.0))
+        Augmentation = float(augmentation_by_year.get(y, 0.0))
+
+        Reserve_Contribution = float(reserve_contribution_by_year.get(y, 0.0))
+        Reserve_Interest = float(reserve_interest_by_year.get(y, 0.0))
+        Reserve_Release = float(reserve_release_by_year.get(y, 0.0))
+        Reserve_Balance = float(reserve_balance_by_year.get(y, 0.0))
+
+        # Decommissioning cash outflow at end of life
+        Decommissioning = decom_cost if (y == pj.project_life and y != 0) else 0.0
 
         CFADS = EBITDA - Taxes
         DSCR = CFADS / Debt_Service if Debt_Service > 0 else None
 
-        Project_FCF = EBITDA - Taxes - CAPEX - Augmentation - Royalty_Upfront_y0 + Cash_Reserve
+        # Reserve flows do NOT affect EBITDA/EBIT; only cash flows
+        Cash_Reserve_Net = Reserve_Contribution + Reserve_Interest + Reserve_Release
+
+        Project_FCF = (
+            EBITDA
+            - Taxes
+            - CAPEX
+            - Augmentation
+            - Royalty_Upfront_y0
+            + Cash_Reserve_Net
+            - Decommissioning
+        )
 
         Equity_CF = (
-            -(CAPEX - debt_amount) - debt_fees - Royalty_Upfront_y0
+            (-(CAPEX - debt_amount) - debt_fees - Royalty_Upfront_y0)
             if y == 0
-            else Project_FCF - Debt_Service
+            else (Project_FCF - Debt_Service)
         )
 
         rows.append(
@@ -347,7 +397,14 @@ def run_financial_model(
 
                 "CAPEX": CAPEX,
                 "Augmentation": Augmentation,
-                "Cash Reserve": Cash_Reserve,
+
+                "Reserve_Contribution": Reserve_Contribution,
+                "Reserve_Interest": Reserve_Interest,
+                "Reserve_Release": Reserve_Release,
+                "Reserve_Balance": Reserve_Balance,
+                "Cash Reserve": Cash_Reserve_Net,
+
+                "Decommissioning": Decommissioning,
 
                 "Debt_Close": Debt_Close,
                 "Debt_Service": Debt_Service,
@@ -362,8 +419,8 @@ def run_financial_model(
 
     df["Debt_Amount"] = debt_amount
     df["Debt_Fees"] = debt_fees
-    df["Discount_Rate_Equity"] = fp.discount_rate_equity
-    df["Discount_Rate_Project"] = dfp.discount_rate_project
-    df["Total_Tax_Rate"] = fp.ires + fp.irap
+    df["Discount_Rate_Equity"] = float(fp.discount_rate_equity)
+    df["Discount_Rate_Project"] = float(dfp.discount_rate_project)
+    df["Total_Tax_Rate"] = float(fp.ires + fp.irap)
 
     return df
