@@ -530,10 +530,18 @@ def build_draft_objects():
     )
 
     floor_type = st.session_state.get("d_floor_type", "CM")
-    mode = st.session_state.get("d_mode", "TOLLING")
 
-    merchant_enabled = bool(st.session_state.get("d_merch_on", False)) and (mode == "MERCHANT")
-    tolling_base = float(st.session_state.get("d_toll_base", 60000.0)) if (mode == "TOLLING") else 0.0
+    # Tolling is always active when base>0, but limited by Tolling duration
+    tolling_base = float(st.session_state.get("d_toll_base", 60000.0))
+    toll_years = int(st.session_state.get("d_toll_years", 0))
+
+    # Merchant can start only after tolling_end and only if life > toll_years
+    merchant_allowed = (project_life > toll_years)
+    merchant_enabled = bool(st.session_state.get("d_merch_on", False)) and merchant_allowed
+
+    # Tolling end year = min(project life, toll_years). If toll_years=0 => tolling disabled (end=0)
+    tolling_end_year = min(project_life, toll_years) if toll_years > 0 and tolling_base > 0 else 0
+    tolling_start_year = 1 if tolling_end_year > 0 else 0
 
     rv = Revenues(
         floor_type=floor_type,
@@ -548,10 +556,10 @@ def build_draft_objects():
         macse_duration_years=int(st.session_state.get("d_macse_years", 10)),
         macse_escalation=float(st.session_state.get("d_macse_esc", 0.0)),
 
-        tolling_base_1_per_mw_year=tolling_base,
-        tolling_1_start_year=1 if tolling_base > 0 else 0,
-        tolling_1_end_year=project_life if tolling_base > 0 else 0,
-        tolling_1_booked_cycles=float(st.session_state.get("d_cycles_per_day", 1.0)) if tolling_base > 0 else 0.0,
+        tolling_base_1_per_mw_year=tolling_base if tolling_end_year > 0 else 0.0,
+        tolling_1_start_year=tolling_start_year,
+        tolling_1_end_year=tolling_end_year,
+        tolling_1_booked_cycles=float(st.session_state.get("d_cycles_per_day", 1.0)) if tolling_end_year > 0 else 0.0,
 
         tolling_base_2_per_mw_year=0.0,
         tolling_2_start_year=0,
@@ -565,6 +573,7 @@ def build_draft_objects():
         merchant_selling_price_per_mwh=float(st.session_state.get("d_merch_price", 120.0)),
         merchant_price_escalation=float(st.session_state.get("d_merch_esc", 0.02)),
     )
+
 
     apply_degradation = bool(st.session_state.get("d_degrade_energy", True))
 
@@ -878,19 +887,33 @@ with tabs[4]:
             pct_input("MACSE escalation (%/year)", "d_macse_esc", "d_macse_esc_ui", 0.0, 0.0, 20.0, 0.1)
 
     with c2:
-        st.radio("Revenue mode (mutually exclusive)", ["TOLLING", "MERCHANT"], horizontal=True, key="d_mode")
+        # Tolling is always configured here.
+        st.markdown("**Tolling**")
+        num_input("Tolling base (€/MW·year)", "d_toll_base", 60000.0, 0.0, 1e9, 1000.0)
+        pct_input("Tolling escalation (%/year)", "d_toll_esc", "d_toll_esc_ui", 2.0, 0.0, 50.0, 0.1)
+        pct_input("Tolling extra income (% on Tolling Revenues)", "d_toll_extra_pct", "d_toll_extra_pct_ui", 0.0, 0.0, 100.0, 0.5)
 
-        if st.session_state.get("d_mode", "TOLLING") == "TOLLING":
-            num_input("Tolling base (€/MW·year)", "d_toll_base", 60000.0, 0.0, 1e9, 1000.0)
-            pct_input("Tolling escalation (%/year)", "d_toll_esc", "d_toll_esc_ui", 2.0, 0.0, 50.0, 0.1)
-            pct_input("Tolling extra income (% on Tolling Revenues)", "d_toll_extra_pct", "d_toll_extra_pct_ui", 0.0, 0.0, 100.0, 0.5)
+        # NEW: Tolling duration
+        st.number_input("Tolling duration (years)", 0, 60, 0, 1, key="d_toll_years")
+        st.caption("Merchant can be enabled only if Project Lifetime > Tolling duration (Merchant starts from year T+1).")
 
+        project_life = int(st.session_state.get("d_project_life", 0))
+        toll_years = int(st.session_state.get("d_toll_years", 0))
+        can_enable_merchant = (project_life > toll_years)
+
+        # Merchant after Tolling
+        st.markdown("**Merchant (after Tolling)**")
+        st.toggle("Enable Merchant after Tolling", key="d_merch_on", disabled=not can_enable_merchant)
+        if not can_enable_merchant and bool(st.session_state.get("d_merch_on", False)):
             st.session_state["d_merch_on"] = False
-            st.toggle("Merchant enabled", value=False, key="d_merch_on", disabled=True)
-        else:
-            st.toggle("Merchant enabled", value=True, key="d_merch_on")
+
+        if bool(st.session_state.get("d_merch_on", False)) and can_enable_merchant:
             num_input("Merchant selling price (€/MWh)", "d_merch_price", 120.0, 0.0, 1e6, 1.0)
             pct_input("Merchant escalation (%/year)", "d_merch_esc", "d_merch_esc_ui", 2.0, 0.0, 50.0, 0.1)
+        else:
+            # keep keys stable
+            st.session_state.setdefault("d_merch_price", 120.0)
+            st.session_state.setdefault("d_merch_esc", 0.02)
 
     st.markdown("</div>", unsafe_allow_html=True)
     page_note()
