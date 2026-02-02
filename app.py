@@ -30,9 +30,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ==================================================
+# ----------------------------
 # PASSWORD PROTECTION (AFTER set_page_config)
-# ==================================================
+# ----------------------------
 _raw = os.getenv("APP_PASSWORDS", "")
 _allowed = {p.strip() for p in _raw.split(",") if p.strip()}
 
@@ -40,7 +40,6 @@ if _allowed:
     pw = st.sidebar.text_input("🔒 Password", type="password")
     if pw not in _allowed:
         st.stop()
-
 
 # ----------------------------
 # PREMIUM STYLE
@@ -155,7 +154,7 @@ def kpi_card(title: str, value: str, sub: str = ""):
 # ----------------------------
 # PDF REPORT (PORTRAIT COVER + LANDSCAPE REST)
 # ----------------------------
-DARK_BLUE = colors.HexColor("#0B2A4A")  # barra header blu scuro
+DARK_BLUE = colors.HexColor("#0B2A4A")  # header bar
 
 
 def _fmt_pct(x, d=2):
@@ -241,17 +240,41 @@ def build_pdf_report_investor(
             ww = hh * aspect
         c.drawImage(img, x + (w_box - ww) / 2, y_top - hh - (h_box - hh) / 2, width=ww, height=hh, mask="auto")
 
-    def draw_data_preview(title: str, series: pd.DataFrame, x: float, y_top: float):
+    def draw_sparkline(title: str, s: pd.Series, x: float, y_top: float, w_box: float = 6.8 * cm, h_box: float = 2.2 * cm):
+        vals = pd.to_numeric(s, errors="coerce").dropna().tolist()
+        if len(vals) < 2:
+            return
+
+        vmin, vmax = min(vals), max(vals)
+        if vmax == vmin:
+            vmax = vmin + 1.0
+
         c.setFont("Helvetica-Bold", 9)
         c.setFillColor(colors.black)
         c.drawString(x, y_top - 0.8 * cm, title)
 
-        c.setFont("Helvetica", 8)
-        y = y_top - 1.4 * cm
-        for i in range(min(len(series), 6)):
-            row = series.iloc[i]
-            c.drawString(x, y, f"Y{int(row['Year'])}: {float(row['Value']):.0f}")
-            y -= 0.45 * cm
+        x0 = x
+        y0 = y_top - 0.9 * cm - h_box
+
+        c.setStrokeColor(colors.HexColor("#DDDDDD"))
+        c.rect(x0, y0, w_box, h_box, stroke=1, fill=0)
+
+        c.setStrokeColor(colors.HexColor("#333333"))
+        pts = []
+        n = len(vals)
+        for i, v in enumerate(vals):
+            px_ = x0 + (i / (n - 1)) * w_box
+            py_ = y0 + ((v - vmin) / (vmax - vmin)) * h_box
+            pts.append((px_, py_))
+
+        for i in range(1, len(pts)):
+            c.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
+
+        c.setFont("Helvetica", 7.5)
+        c.setFillColor(colors.HexColor("#666666"))
+        c.drawString(x0, y0 - 0.35 * cm, f"min {vmin:,.0f}")
+        c.drawRightString(x0 + w_box, y0 - 0.35 * cm, f"max {vmax:,.0f}")
+        c.setFillColor(colors.black)
 
     generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -267,7 +290,7 @@ def build_pdf_report_investor(
 
     c.setFont("Helvetica", 10)
     c.setFillColor(colors.HexColor("#444444"))
-    c.drawString(2 * cm, h - 3.65 * cm, f"Floor: {rv.floor_type} | Municipality Fees: {'YES' if mf.enabled else 'NO'}")
+    c.drawString(2 * cm, h - 3.65 * cm, f"Floor: {rv.floor_type} | Municipality fees: {'YES' if mf.enabled else 'NO'}")
     c.setFillColor(colors.black)
 
     top_y = h - 4.7 * cm
@@ -302,11 +325,11 @@ def build_pdf_report_investor(
         ("Cycles/day", f"{pj.cycles_per_day:.2f}"),
         ("SOC min / max", f"{pj.soc_min:.2f} / {pj.soc_max:.2f}"),
         ("Unavailability", _fmt_pct(pj.grid_system_unavailability)),
-        ("CAPEX €/MW", f"{getattr(cx, 'initial_capex_per_mw', 0.0):,.0f}"),
+        ("CAPEX €/MWh", f"{getattr(cx, 'initial_capex_per_mw', 0.0):,.0f}"),
         ("Debt %", _fmt_pct(fp.debt_pct_on_capex)),
         ("Interest rate", _fmt_pct(fp.interest_rate)),
         ("IRES / IRAP", f"{fp.ires*100:.1f}% / {fp.irap*100:.1f}%"),
-        ("Municipality Fees %", _fmt_pct(mf.royalty_pct) if mf.enabled else "—"),
+        ("Municipality fees %", _fmt_pct(mf.royalty_pct) if mf.enabled else "—"),
         ("Fees paid upfront", "YES" if (mf.enabled and mf.discounted_upfront) else "NO"),
     ]
     draw_kv_table(right_x, y_right, rows_in, colw1=colw1, colw2=colw2, row_h=0.48 * cm)
@@ -326,31 +349,21 @@ def build_pdf_report_investor(
     x2 = 2 * cm + box_w + 1.0 * cm
     y_top = h - 2.7 * cm
 
-    # LEFT: rev_ebitda
     if "rev_ebitda" in figs:
         img = _plotly_png(figs["rev_ebitda"])
         if img:
             draw_image_fit(img, x1, y_top, box_w, box_h)
         else:
-            tmp = df.loc[df["Year"] <= 6, ["Year", "Revenue_Total"]].copy()
-            tmp.columns = ["Year", "Value"]
-            draw_data_preview("Revenue_Total (preview)", tmp, x1, y_top)
-            tmp2 = df.loc[df["Year"] <= 6, ["Year", "EBITDA"]].copy()
-            tmp2.columns = ["Year", "Value"]
-            draw_data_preview("EBITDA (preview)", tmp2, x1 + 7.0 * cm, y_top)
+            draw_sparkline("Revenue_Total", df.loc[df["Year"] >= 0, "Revenue_Total"], x1, y_top)
+            draw_sparkline("EBITDA", df.loc[df["Year"] >= 0, "EBITDA"], x1, y_top - 3.1 * cm)
 
-    # RIGHT: cf
     if "cf" in figs:
         img = _plotly_png(figs["cf"])
         if img:
             draw_image_fit(img, x2, y_top, box_w, box_h)
         else:
-            tmp = df.loc[df["Year"] <= 6, ["Year", "Project_FCF"]].copy()
-            tmp.columns = ["Year", "Value"]
-            draw_data_preview("Project_FCF (preview)", tmp, x2, y_top)
-            tmp2 = df.loc[df["Year"] <= 6, ["Year", "Equity_CF"]].copy()
-            tmp2.columns = ["Year", "Value"]
-            draw_data_preview("Equity_CF (preview)", tmp2, x2 + 7.0 * cm, y_top)
+            draw_sparkline("Project_FCF", df.loc[df["Year"] >= 0, "Project_FCF"], x2, y_top)
+            draw_sparkline("Equity_CF", df.loc[df["Year"] >= 0, "Equity_CF"], x2, y_top - 3.1 * cm)
 
     footer(w)
     c.showPage()
@@ -366,37 +379,33 @@ def build_pdf_report_investor(
         if img:
             draw_image_fit(img, x1, y_top, box_w, box_h)
         else:
-            tmp = df.loc[df["Year"] <= 6, ["Year", "Debt_Service"]].copy()
-            tmp.columns = ["Year", "Value"]
-            draw_data_preview("Debt_Service (preview)", tmp, x1, y_top)
+            draw_sparkline("Debt_Service", df.loc[df["Year"] >= 0, "Debt_Service"], x1, y_top)
 
     if "dscr" in figs:
         img = _plotly_png(figs["dscr"])
         if img:
             draw_image_fit(img, x2, y_top, box_w, box_h)
         else:
-            tmp = df.loc[df["Year"] <= 6, ["Year", "DSCR"]].copy()
-            tmp["DSCR"] = pd.to_numeric(tmp["DSCR"], errors="coerce").fillna(0.0)
-            tmp.columns = ["Year", "Value"]
-            draw_data_preview("DSCR (preview)", tmp, x2, y_top)
+            draw_sparkline("DSCR", pd.to_numeric(df["DSCR"], errors="coerce").fillna(0.0), x2, y_top)
 
     footer(w)
     c.showPage()
 
     # =========================
-    # RESULTS TABLE: LANDSCAPE (paginated) — FIXED FIT
+    # RESULTS TABLE: LANDSCAPE (paginated) — compact
     # =========================
     w, h = set_landscape()
     header_bar("Results table", "Main yearly outputs", w, h)
 
     cols = [
         "Year", "Revenue_Total", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant",
-        "OPEX", "Municipality_Royalty", "EBITDA",
+        "OPEX", "Municipality_Fees", "EBITDA",
         "Depreciation", "Interest", "EBT", "Taxes",
         "CAPEX", "Augmentation", "Cash Reserve",
         "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"
     ]
-    d = df.copy()
+
+    d = df.copy().rename(columns={"Municipality_Royalty": "Municipality_Fees"})
     for col in cols:
         if col not in d.columns:
             d[col] = 0.0
@@ -500,6 +509,7 @@ def build_draft_objects():
 
     cx = CapexOpex(
         initial_capex_per_mw=float(st.session_state.get("d_capex_per_mw", 250000.0)),
+        land_cost_eur=float(st.session_state.get("d_land_cost", 0.0)),
         battery_share_of_capex=float(st.session_state.get("d_batt_share", 0.60)),
         augmentation_cost_pct_of_batt_capex=float(st.session_state.get("d_aug_pct", 0.25)),
         augmentation_year_1=int(st.session_state.get("d_aug_y1", 0)),
@@ -507,7 +517,6 @@ def build_draft_objects():
         fixed_om_per_mw_year=float(st.session_state.get("d_om_fixed", 8000.0)),
         insurance_grid_per_mw_year=float(st.session_state.get("d_om_ins", 5000.0)),
         decommissioning_per_mw=float(st.session_state.get("d_decom_per_mw", 15000.0)),
-        land_cost_eur=float(st.session_state.get("d_land_cost", 0.0)),
     )
 
     fp = FinancialParameters(
@@ -585,6 +594,7 @@ def build_draft_objects():
 # ----------------------------
 st.title("BESS - Model App")
 
+
 # ----------------------------
 # SIDEBAR
 # ----------------------------
@@ -600,8 +610,12 @@ with st.sidebar:
 
     apply = st.button("Apply changes", type="primary")
 
-    st.selectbox("Input decimals", [0, 1, 2, 3, 4], index=[0, 1, 2, 3, 4].index(st.session_state["input_decimals"]), key="input_decimals")
-    st.selectbox("Display decimals", [0, 1, 2], index=[0, 1, 2].index(st.session_state["display_decimals"]), key="display_decimals")
+    st.selectbox("Input decimals", [0, 1, 2, 3, 4],
+                 index=[0, 1, 2, 3, 4].index(st.session_state["input_decimals"]),
+                 key="input_decimals")
+    st.selectbox("Display decimals", [0, 1, 2],
+                 index=[0, 1, 2].index(st.session_state["display_decimals"]),
+                 key="display_decimals")
     st.toggle("Apply degradation", key="d_degrade_energy")
 
     st.divider()
@@ -640,7 +654,7 @@ tabs = st.tabs(
         "PROJECT DATA",
         "CAPEX & OPEX",
         "FINANCIAL PARAMETERS",
-        "MUNICIPALITY FEES / ROYALTIES",
+        "MUNICIPALITY FEES",
         "REVENUES",
         "TERMINAL VALUE",
         "RESULTS",
@@ -710,32 +724,19 @@ with tabs[1]:
     with c1:
         num_input("Initial Capex per MWh (€/MWh)", "d_capex_per_mw", 250000.0, 0.0, 1e9, 1000.0)
         pct_input("Battery share of CAPEX (%)", "d_batt_share", "d_batt_share_ui", 60.0, 0.0, 100.0, 1.0)
-        pct_input(
-            "Augmentation cost (% of initial battery CAPEX per event) (%)",
-            "d_aug_pct",
-            "d_aug_pct_ui",
-            25.0,
-            0.0,
-            200.0,
-            1.0,
-        )
+        pct_input("Augmentation cost (% of initial battery CAPEX per event) (%)", "d_aug_pct", "d_aug_pct_ui", 25.0, 0.0, 200.0, 1.0)
 
     with c2:
         st.number_input("Augmentation year #1", 0, 60, 0, 1, key="d_aug_y1")
         st.number_input("Augmentation year #2", 0, 60, 0, 1, key="d_aug_y2")
-
         num_input("Decommissioning/end-of-life (€/MW)", "d_decom_per_mw", 15000.0, 0.0, 1e9, 1000.0)
-        st.caption(
-            "If any decommissioning cost, the model will automatically calculate annual cash reserves "
-            "- these will not impact on EBITDA/EBIT."
-        )
+        st.caption("If any decommissioning cost, the model will automatically calculate annual cash reserves - these will not impact on EBITDA/EBIT.")
 
     with c3:
         num_input("Fixed O&M (€/MW·year)", "d_om_fixed", 8000.0, 0.0, 1e9, 100.0)
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)
-
         num_input("Land Cost (€)", "d_land_cost", 0.0, 0.0, 1e12, 1000.0)
-        st.caption("Land cost including taxes - purchase or upfront lease at year-0")
+        st.caption("Land cost including taxes - purchase or upfront lease at year 0")
 
     nominal_energy = float(st.session_state.get("d_nominal_energy", 200.0))
     nominal_power = float(st.session_state.get("d_nominal_power", 50.0))
@@ -759,8 +760,10 @@ with tabs[1]:
     decom_per_mw = float(st.session_state.get("d_decom_per_mw", 15000.0))
     decom_cost = decom_per_mw * nominal_power
 
+    land_cost = float(st.session_state.get("d_land_cost", 0.0))
+
     st.divider()
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         kpi_card("Initial Total CAPEX (€)", fmt_eur(total_capex, 0), "Nominal Energy × CAPEX €/MWh")
     with k2:
@@ -769,6 +772,8 @@ with tabs[1]:
         kpi_card("Augmentation (€)", fmt_eur(aug_cost_each, 0), f"Per event | Events: {aug_events}")
     with k4:
         kpi_card("Decommissioning (€)", fmt_eur(decom_cost, 0), "€ / MW × Nominal Power")
+    with k5:
+        kpi_card("Land Cost (€)", fmt_eur(land_cost, 0), "Paid at Year 0")
 
     st.markdown("</div>", unsafe_allow_html=True)
     page_note()
@@ -831,7 +836,7 @@ with tabs[2]:
 
 
 # ----------------------------
-# TAB 4: MUNICIPALITY FEES / ROYALTIES
+# TAB 4: MUNICIPALITY FEES
 # ----------------------------
 with tabs[3]:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
@@ -841,29 +846,32 @@ with tabs[3]:
     with c1:
         st.toggle("Apply municipality fees?", key="d_muni_on")
     with c2:
-        pct_input("Fee rate (%)", "d_muni_pct", "d_muni_pct_ui", 3.0, 0.0, 20.0, 0.1)
+        pct_input("Municipality fee rate (%)", "d_muni_pct", "d_muni_pct_ui", 3.0, 0.0, 20.0, 0.1)
     with c3:
         st.toggle("Discount fees and pay upfront at Year 0?", key="d_muni_upfront")
         pct_input("Discount rate (WACC) (%)", "d_muni_wacc", "d_muni_wacc_ui", 8.0, 0.0, 40.0, 0.1)
 
     st.divider()
+
     df = st.session_state.get("active_df", None)
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        st.info("Run 'Apply changes' to compute royalties.")
+        st.info("Run 'Apply changes' to compute municipality fees.")
     else:
         muni_on = bool(st.session_state.get("d_muni_on", False))
         upfront = bool(st.session_state.get("d_muni_upfront", False))
 
         if not muni_on:
-            st.caption("Fees disabled.")
+            st.caption("Municipality fees disabled.")
         else:
             if upfront and "Municipality_Royalty_Upfront" in df.columns:
                 pv_val = float(df["Municipality_Royalty_Upfront"].iloc[0])
-                kpi_card("Municipality Fees PV (paid upfront @ Year 0)", fmt_eur(pv_val, 0), "PV of future Municipality Fees (paid at Year 0)")
+                kpi_card("Municipality Fees PV (paid upfront @ Year 0)", fmt_eur(pv_val, 0), "PV of future municipality fees (paid at Year 0)")
                 tbl = df.loc[df["Year"] >= 0, ["Year", "Revenue_Total", "Municipality_Royalty", "Municipality_Royalty_Upfront"]].copy()
+                tbl = tbl.rename(columns={"Municipality_Royalty": "Municipality_Fees", "Municipality_Royalty_Upfront": "Municipality_Fees_Upfront"})
                 st.dataframe(tbl, use_container_width=True)
             else:
                 tbl = df.loc[df["Year"] >= 0, ["Year", "Revenue_Total", "Municipality_Royalty"]].copy()
+                tbl = tbl.rename(columns={"Municipality_Royalty": "Municipality_Fees"})
                 st.dataframe(tbl, use_container_width=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -967,14 +975,15 @@ with tabs[6]:
         st.divider()
 
         cols_rev = ["Year", "Revenue_Floor", "Revenue_Tolling", "Revenue_Merchant", "Revenue_Total"]
-        cols_pl = ["OPEX", "Municipality_Royalty", "EBITDA", "Depreciation", "Interest", "EBT", "Taxes"]
+        cols_pl = ["OPEX", "Municipality_Fees", "EBITDA", "Depreciation", "Interest", "EBT", "Taxes"]
         cols_cf = ["CAPEX", "Augmentation", "Cash Reserve", "Debt_Service", "DSCR", "Project_FCF", "Equity_CF"]
 
+        show = df.copy().rename(columns={"Municipality_Royalty": "Municipality_Fees"})
         for col in cols_rev + cols_pl + cols_cf:
-            if col not in df.columns:
-                df[col] = 0.0
+            if col not in show.columns:
+                show[col] = 0.0
 
-        show = df[cols_rev + cols_pl + cols_cf].copy()
+        show = show[cols_rev + cols_pl + cols_cf].copy()
 
         def format_df(d: pd.DataFrame) -> pd.DataFrame:
             out = d.copy()
