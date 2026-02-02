@@ -735,7 +735,7 @@ with tabs[1]:
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)
 
         num_input("Land Cost (€)", "d_land_cost", 0.0, 0.0, 1e12, 1000.0)
-        st.caption("Land cost including taxes - purchase or upfront lease at year 0")
+        st.caption("Land cost including taxes - purchase or upfront lease at year-0")
 
     nominal_energy = float(st.session_state.get("d_nominal_energy", 200.0))
     nominal_power = float(st.session_state.get("d_nominal_power", 50.0))
