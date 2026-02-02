@@ -507,6 +507,7 @@ def build_draft_objects():
         fixed_om_per_mw_year=float(st.session_state.get("d_om_fixed", 8000.0)),
         insurance_grid_per_mw_year=float(st.session_state.get("d_om_ins", 5000.0)),
         decommissioning_per_mw=float(st.session_state.get("d_decom_per_mw", 15000.0)),
+        land_cost_eur=float(st.session_state.get("d_land_cost", 0.0)),
     )
 
     fp = FinancialParameters(
@@ -712,8 +713,15 @@ with tabs[1]:
     with c2:
         st.number_input("Augmentation year #1", 0, 60, 0, 1, key="d_aug_y1")
         st.number_input("Augmentation year #2", 0, 60, 0, 1, key="d_aug_y2")
+
         num_input("Decommissioning/end-of-life (€/MW)", "d_decom_per_mw", 15000.0, 0.0, 1e9, 1000.0)
-        st.caption("If any decommissioning cost, the model will automatically calculate annual cash reserves - these will not impact on EBITDA/EBIT.")
+        st.caption(
+        "If any decommissioning cost, the model will automatically calculate annual cash reserves "
+        "- these will not impact on EBITDA/EBIT."
+        )
+
+        num_input("Land Cost (€)", "d_land_cost", 0.0, 0.0, 1e12, 1000.0)
+        st.caption("Land cost including taxes - purchase or upfront lease at year 0")
     with c3:
         num_input("Fixed O&M (€/MW·year)", "d_om_fixed", 8000.0, 0.0, 1e9, 100.0)
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)

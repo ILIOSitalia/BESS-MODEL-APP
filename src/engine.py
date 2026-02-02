@@ -144,6 +144,7 @@ def run_financial_model(
     # CAPEX & AUGMENTATION (separate column)
     # ---------------------------
     capex0 = float(dc.total_capex_eur)
+    land_cost = float(getattr(cx, "land_cost_eur", 0.0))
 
     aug_years: list[int] = []
     if cx.augmentation_year_1 and cx.augmentation_year_1 <= pj.project_life:
@@ -153,7 +154,7 @@ def run_financial_model(
 
     aug_cost_each = capex0 * float(cx.battery_share_of_capex) * float(cx.augmentation_cost_pct_of_batt_capex)
 
-    capex_by_year = {0: capex0}
+    capex_by_year = {0: capex0 + land_cost}
     augmentation_by_year = {y: 0.0 for y in years}
     for y in aug_years:
         augmentation_by_year[y] += aug_cost_each

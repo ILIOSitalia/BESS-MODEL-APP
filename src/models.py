@@ -48,6 +48,8 @@ class CapexOpex(BaseModel):
 
     decommissioning_per_mw: float = Field(default=15000.0, ge=0.0)
 
+    land_cost_eur: float = Field(default=0.0, ge=0.0)
+
 
 # =========================================================
 # FINANCIAL PARAMETERS
