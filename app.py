@@ -267,7 +267,7 @@ def build_pdf_report_investor(
 
     c.setFont("Helvetica", 10)
     c.setFillColor(colors.HexColor("#444444"))
-    c.drawString(2 * cm, h - 3.65 * cm, f"Floor: {rv.floor_type} | Royalties: {'YES' if mf.enabled else 'NO'}")
+    c.drawString(2 * cm, h - 3.65 * cm, f"Floor: {rv.floor_type} | Municipality Fees: {'YES' if mf.enabled else 'NO'}")
     c.setFillColor(colors.black)
 
     top_y = h - 4.7 * cm
@@ -306,8 +306,8 @@ def build_pdf_report_investor(
         ("Debt %", _fmt_pct(fp.debt_pct_on_capex)),
         ("Interest rate", _fmt_pct(fp.interest_rate)),
         ("IRES / IRAP", f"{fp.ires*100:.1f}% / {fp.irap*100:.1f}%"),
-        ("Royalties %", _fmt_pct(mf.royalty_pct) if mf.enabled else "—"),
-        ("Royalties upfront", "YES" if (mf.enabled and mf.discounted_upfront) else "NO"),
+        ("Municipality Fees %", _fmt_pct(mf.royalty_pct) if mf.enabled else "—"),
+        ("Fees paid upfront", "YES" if (mf.enabled and mf.discounted_upfront) else "NO"),
     ]
     draw_kv_table(right_x, y_right, rows_in, colw1=colw1, colw2=colw2, row_h=0.48 * cm)
 
@@ -816,15 +816,15 @@ with tabs[2]:
 # ----------------------------
 with tabs[3]:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">MUNICIPALITY FEES / ROYALTIES</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">MUNICIPALITY FEES</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.toggle("Apply municipality royalties?", key="d_muni_on")
+        st.toggle("Apply municipality fees?", key="d_muni_on")
     with c2:
-        pct_input("Royalty rate (%)", "d_muni_pct", "d_muni_pct_ui", 3.0, 0.0, 20.0, 0.1)
+        pct_input("Fee rate (%)", "d_muni_pct", "d_muni_pct_ui", 3.0, 0.0, 20.0, 0.1)
     with c3:
-        st.toggle("Discount royalties and pay upfront at Year 0?", key="d_muni_upfront")
+        st.toggle("Discount fees and pay upfront at Year 0?", key="d_muni_upfront")
         pct_input("Discount rate (WACC) (%)", "d_muni_wacc", "d_muni_wacc_ui", 8.0, 0.0, 40.0, 0.1)
 
     st.divider()
@@ -836,11 +836,11 @@ with tabs[3]:
         upfront = bool(st.session_state.get("d_muni_upfront", False))
 
         if not muni_on:
-            st.caption("Royalties disabled.")
+            st.caption("Fees disabled.")
         else:
             if upfront and "Municipality_Royalty_Upfront" in df.columns:
                 pv_val = float(df["Municipality_Royalty_Upfront"].iloc[0])
-                kpi_card("Royalties PV (paid upfront @ Year 0)", fmt_eur(pv_val, 0), "PV of future royalties (paid at Year 0)")
+                kpi_card("Municipality Fees PV (paid upfront @ Year 0)", fmt_eur(pv_val, 0), "PV of future Municipality Fees (paid at Year 0)")
                 tbl = df.loc[df["Year"] >= 0, ["Year", "Revenue_Total", "Municipality_Royalty", "Municipality_Royalty_Upfront"]].copy()
                 st.dataframe(tbl, use_container_width=True)
             else:
