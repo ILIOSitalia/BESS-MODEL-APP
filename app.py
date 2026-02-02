@@ -706,25 +706,36 @@ with tabs[1]:
     st.markdown('<div class="section-title">CAPEX & OPEX</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns(3)
+
     with c1:
         num_input("Initial Capex per MWh (€/MWh)", "d_capex_per_mw", 250000.0, 0.0, 1e9, 1000.0)
         pct_input("Battery share of CAPEX (%)", "d_batt_share", "d_batt_share_ui", 60.0, 0.0, 100.0, 1.0)
-        pct_input("Augmentation cost (% of initial battery CAPEX per event) (%)", "d_aug_pct", "d_aug_pct_ui", 25.0, 0.0, 200.0, 1.0)
+        pct_input(
+            "Augmentation cost (% of initial battery CAPEX per event) (%)",
+            "d_aug_pct",
+            "d_aug_pct_ui",
+            25.0,
+            0.0,
+            200.0,
+            1.0,
+        )
+
     with c2:
         st.number_input("Augmentation year #1", 0, 60, 0, 1, key="d_aug_y1")
         st.number_input("Augmentation year #2", 0, 60, 0, 1, key="d_aug_y2")
 
         num_input("Decommissioning/end-of-life (€/MW)", "d_decom_per_mw", 15000.0, 0.0, 1e9, 1000.0)
         st.caption(
-        "If any decommissioning cost, the model will automatically calculate annual cash reserves "
-        "- these will not impact on EBITDA/EBIT."
+            "If any decommissioning cost, the model will automatically calculate annual cash reserves "
+            "- these will not impact on EBITDA/EBIT."
         )
 
-        num_input("Land Cost (€)", "d_land_cost", 0.0, 0.0, 1e12, 1000.0)
-        st.caption("Land cost including taxes - purchase or upfront lease at year 0")
     with c3:
         num_input("Fixed O&M (€/MW·year)", "d_om_fixed", 8000.0, 0.0, 1e9, 100.0)
         num_input("Insurance + grid (€/MW·year)", "d_om_ins", 5000.0, 0.0, 1e9, 100.0)
+
+        num_input("Land Cost (€)", "d_land_cost", 0.0, 0.0, 1e12, 1000.0)
+        st.caption("Land cost including taxes - purchase or upfront lease at year 0")
 
     nominal_energy = float(st.session_state.get("d_nominal_energy", 200.0))
     nominal_power = float(st.session_state.get("d_nominal_power", 50.0))
